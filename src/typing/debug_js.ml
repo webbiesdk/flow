@@ -68,280 +68,291 @@ let rec _json_of_t json_cx t =
     check_depth _json_of_t_impl json_cx t
   )
 
-and _json_of_t_impl json_cx t = Hh_json.(
-  JSON_Object ([
-    "reason", json_of_reason ~strip_root:json_cx.strip_root (reason_of_t t);
-    "kind", JSON_String (string_of_ctor t)
-  ] @
-  match t with
-  | OpenT (_, id) -> [
-      "id", int_ id
-    ] @
-    if ISet.mem id json_cx.stack then []
-    else [
-      "node", json_of_node json_cx id
-    ]
+and _json_of_t_impl json_cx t =
+      match Context.find_type_json_cached json_cx.cx t with
+      Some i ->
+        Hh_json.(
+          JSON_Object ([
+            "kind", JSON_String "unresolved";
+            "id", JSON_String (string_of_int i)
+          ])
+        )
+      | None -> Context.add_type_json_cache json_cx.cx t;
+                Hh_json.(
+                  JSON_Object ([
+                    "reason", json_of_reason ~strip_root:json_cx.strip_root (reason_of_t t);
+                    "kind", JSON_String (string_of_ctor t);
+                    "cache_id", JSON_String (string_of_int (Context.find_type_json_cached_unsafe json_cx.cx t))
+                  ] @
+                  match t with
+                  | OpenT (_, id) -> [
+                      "id", int_ id
+                    ] @
+                    if ISet.mem id json_cx.stack then []
+                    else [
+                      "node", json_of_node json_cx id
+                    ]
 
-  | DefT (_, NumT lit) ->
-    begin match lit with
-    | Literal (_, (_, raw)) -> ["literal", JSON_String raw]
-    | Truthy -> ["refinement", JSON_String "Truthy"]
-    | AnyLiteral -> []
-    end
+                  | DefT (_, NumT lit) ->
+                    begin match lit with
+                    | Literal (_, (_, raw)) -> ["literal", JSON_String raw]
+                    | Truthy -> ["refinement", JSON_String "Truthy"]
+                    | AnyLiteral -> []
+                    end
 
-  | DefT (_, StrT lit) -> _json_of_string_literal lit
+                  | DefT (_, StrT lit) -> _json_of_string_literal lit
 
-  | DefT (_, BoolT b) ->
-    (match b with
-      | Some b -> ["literal", JSON_Bool b]
-      | None -> [])
+                  | DefT (_, BoolT b) ->
+                    (match b with
+                      | Some b -> ["literal", JSON_Bool b]
+                      | None -> [])
 
-  | DefT (_, EmptyT)
-  | DefT (_, MixedT _)
-  | DefT (_, AnyT)
-  | DefT (_, NullT)
-  | DefT (_, VoidT)
-    -> []
+                  | DefT (_, EmptyT)
+                  | DefT (_, MixedT _)
+                  | DefT (_, AnyT)
+                  | DefT (_, NullT)
+                  | DefT (_, VoidT)
+                    -> []
 
-  | TaintT _
-  | NullProtoT _
-  | ObjProtoT _
-  | FunProtoT _
-  | FunProtoApplyT _
-  | FunProtoBindT _
-  | FunProtoCallT _
-    -> []
+                  | TaintT _
+                  | NullProtoT _
+                  | ObjProtoT _
+                  | FunProtoT _
+                  | FunProtoApplyT _
+                  | FunProtoBindT _
+                  | FunProtoCallT _
+                    -> []
 
-  | DefT (_, FunT (static, proto, funtype)) -> [
-      "static", _json_of_t json_cx static;
-      "prototype", _json_of_t json_cx proto;
-      "funType", json_of_funtype json_cx funtype
-    ]
+                  | DefT (_, FunT (static, proto, funtype)) -> [
+                      "static", _json_of_t json_cx static;
+                      "prototype", _json_of_t json_cx proto;
+                      "funType", json_of_funtype json_cx funtype
+                    ]
 
-  | DefT (_, ObjT objtype) -> [
-      "type", json_of_objtype json_cx objtype
-    ]
+                  | DefT (_, ObjT objtype) -> [
+                      "type", json_of_objtype json_cx objtype
+                    ]
 
-  | DefT (_, ArrT (ArrayAT (elemt, tuple_types))) -> [
-      "kind", JSON_String "Array";
-      "elemType", _json_of_t json_cx elemt;
-      "tupleType", match tuple_types with
-      | Some tuplet -> JSON_Array (List.map (_json_of_t json_cx) tuplet)
-      | None -> JSON_Null
-    ]
+                  | DefT (_, ArrT (ArrayAT (elemt, tuple_types))) -> [
+                      "kind", JSON_String "Array";
+                      "elemType", _json_of_t json_cx elemt;
+                      "tupleType", match tuple_types with
+                      | Some tuplet -> JSON_Array (List.map (_json_of_t json_cx) tuplet)
+                      | None -> JSON_Null
+                    ]
 
-  | DefT (_, ArrT (TupleAT (elemt, tuple_types))) -> [
-      "kind", JSON_String "Tuple";
-      "elemType", _json_of_t json_cx elemt;
-      "tupleType", JSON_Array (List.map (_json_of_t json_cx) tuple_types);
-    ]
+                  | DefT (_, ArrT (TupleAT (elemt, tuple_types))) -> [
+                      "kind", JSON_String "Tuple";
+                      "elemType", _json_of_t json_cx elemt;
+                      "tupleType", JSON_Array (List.map (_json_of_t json_cx) tuple_types);
+                    ]
 
-  | DefT (_, ArrT (ROArrayAT (elemt))) -> [
-      "kind", JSON_String "ReadOnlyArray";
-      "elemType", _json_of_t json_cx elemt;
-    ]
+                  | DefT (_, ArrT (ROArrayAT (elemt))) -> [
+                      "kind", JSON_String "ReadOnlyArray";
+                      "elemType", _json_of_t json_cx elemt;
+                    ]
 
-  | DefT (_, ArrT EmptyAT) -> [
-      "kind", JSON_String "EmptyArray";
-    ]
+                  | DefT (_, ArrT EmptyAT) -> [
+                      "kind", JSON_String "EmptyArray";
+                    ]
 
-  | DefT (_, CharSetT chars) -> [
-      "chars", JSON_String (String_utils.CharSet.to_string chars);
-    ]
+                  | DefT (_, CharSetT chars) -> [
+                      "chars", JSON_String (String_utils.CharSet.to_string chars);
+                    ]
 
-  | DefT (_, ClassT t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | DefT (_, ClassT t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DefT (_, InstanceT (static, super, implements, instance)) -> [
-      "static", _json_of_t json_cx static;
-      "super", _json_of_t json_cx super;
-      "implements", JSON_Array (List.map (_json_of_t json_cx) implements);
-      "instance", json_of_insttype json_cx instance
-    ]
+                  | DefT (_, InstanceT (static, super, implements, instance)) -> [
+                      "static", _json_of_t json_cx static;
+                      "super", _json_of_t json_cx super;
+                      "implements", JSON_Array (List.map (_json_of_t json_cx) implements);
+                      "instance", json_of_insttype json_cx instance
+                    ]
 
-  | DefT (_, OptionalT t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | DefT (_, OptionalT t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | EvalT (t, defer_use_t, id) -> [
-      "type", _json_of_t json_cx t;
-      "defer_use_type", json_of_defer_use_t json_cx defer_use_t
-    ] @
-      let evaluated = Context.evaluated json_cx.cx in
-      begin match IMap.get id evaluated with
-      | None -> []
-      | Some t -> [ "result", _json_of_t json_cx t ]
-      end
+                  | EvalT (t, defer_use_t, id) -> [
+                      "type", _json_of_t json_cx t;
+                      "defer_use_type", json_of_defer_use_t json_cx defer_use_t
+                    ] @
+                      let evaluated = Context.evaluated json_cx.cx in
+                      begin match IMap.get id evaluated with
+                      | None -> []
+                      | Some t -> [ "result", _json_of_t json_cx t ]
+                      end
 
-  | DefT (_, PolyT (tparams, t, id)) -> [
-      "id", JSON_Number (string_of_int id);
-      "typeParams", JSON_Array (List.map (json_of_typeparam json_cx) tparams);
-      "type", _json_of_t json_cx t
-    ]
+                  | DefT (_, PolyT (tparams, t, id)) -> [
+                      "id", JSON_Number (string_of_int id);
+                      "typeParams", JSON_Array (List.map (json_of_typeparam json_cx) tparams);
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DefT (_, TypeAppT (t, targs)) -> [
-      "typeArgs", JSON_Array (List.map (_json_of_t json_cx) targs);
-      "type", _json_of_t json_cx t
-    ]
+                  | DefT (_, TypeAppT (t, targs)) -> [
+                      "typeArgs", JSON_Array (List.map (_json_of_t json_cx) targs);
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | ThisClassT (_, t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | ThisClassT (_, t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | ThisTypeAppT (_, t, this, targs_opt) -> (
-      match targs_opt with
-        | Some targs -> [ "typeArgs", JSON_Array (List.map (_json_of_t json_cx) targs) ]
-        | None -> []
-    ) @ [
-      "thisArg", _json_of_t json_cx this;
-      "type", _json_of_t json_cx t
-    ]
+                  | ThisTypeAppT (_, t, this, targs_opt) -> (
+                      match targs_opt with
+                        | Some targs -> [ "typeArgs", JSON_Array (List.map (_json_of_t json_cx) targs) ]
+                        | None -> []
+                    ) @ [
+                      "thisArg", _json_of_t json_cx this;
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | BoundT tparam -> [
-      "typeParam", json_of_typeparam json_cx tparam
-    ]
+                  | BoundT tparam -> [
+                      "typeParam", json_of_typeparam json_cx tparam
+                    ]
 
-  | ExistsT _ ->
-    []
+                  | ExistsT _ ->
+                    []
 
-  | ExactT (_, t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | ExactT (_, t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DefT (_, MaybeT t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | DefT (_, MaybeT t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DefT (_, IntersectionT rep) -> [
-      let ts = InterRep.members rep in
-      "types", JSON_Array (List.map (_json_of_t json_cx) ts)
-    ]
+                  | DefT (_, IntersectionT rep) -> [
+                      let ts = InterRep.members rep in
+                      "types", JSON_Array (List.map (_json_of_t json_cx) ts)
+                    ]
 
-  | DefT (_, UnionT rep) -> [
-      let ts = UnionRep.members rep in
-      "types", JSON_Array (List.map (_json_of_t json_cx) ts)
-    ]
+                  | DefT (_, UnionT rep) -> [
+                      let ts = UnionRep.members rep in
+                      "types", JSON_Array (List.map (_json_of_t json_cx) ts)
+                    ]
 
-  | AnyWithLowerBoundT t
-  | AnyWithUpperBoundT t -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | AnyWithLowerBoundT t
+                  | AnyWithUpperBoundT t -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | MergedT (_, uses) -> [
-      "uses", JSON_Array (List.map (_json_of_use_t json_cx) uses);
-    ]
+                  | MergedT (_, uses) -> [
+                      "uses", JSON_Array (List.map (_json_of_use_t json_cx) uses);
+                    ]
 
-  | DefT (_, AnyObjT)
-  | DefT (_, AnyFunT) ->
-    []
+                  | DefT (_, AnyObjT)
+                  | DefT (_, AnyFunT) ->
+                    []
 
-  | ShapeT t -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | ShapeT t -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DiffT (t1, t2) -> [
-      "type1", _json_of_t json_cx t1;
-      "type2", _json_of_t json_cx t2
-    ]
+                  | DiffT (t1, t2) -> [
+                      "type1", _json_of_t json_cx t1;
+                      "type2", _json_of_t json_cx t2
+                    ]
 
-  | KeysT (_, t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | KeysT (_, t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  | DefT (_, SingletonStrT s) -> [
-      "literal", JSON_String s
-    ]
+                  | DefT (_, SingletonStrT s) -> [
+                      "literal", JSON_String s
+                    ]
 
-  | DefT (_, SingletonNumT (_, raw)) -> [
-      "literal", JSON_String raw
-    ]
+                  | DefT (_, SingletonNumT (_, raw)) -> [
+                      "literal", JSON_String raw
+                    ]
 
-  | DefT (_, SingletonBoolT b) -> [
-      "literal", JSON_Bool b
-    ]
+                  | DefT (_, SingletonBoolT b) -> [
+                      "literal", JSON_Bool b
+                    ]
 
-  | DefT (_, TypeT t) -> [
-      "result", _json_of_t json_cx t
-    ]
+                  | DefT (_, TypeT t) -> [
+                      "result", _json_of_t json_cx t
+                    ]
 
-  | AnnotT (t, use_desc) -> [
-      "assume", _json_of_t json_cx t;
-      "useDesc", JSON_Bool use_desc;
-    ]
+                  | AnnotT (t, use_desc) -> [
+                      "assume", _json_of_t json_cx t;
+                      "useDesc", JSON_Bool use_desc;
+                    ]
 
-  | OpaqueT (_, opaquetype) ->
-    let t = match opaquetype.underlying_t with
-    | Some t -> _json_of_t json_cx t
-    | None -> JSON_Null in
-    let st = match opaquetype.super_t with
-    | Some st -> _json_of_t json_cx st
-    | None -> JSON_Null in
-    [
-      "type", t;
-      "id", JSON_String (string_of_int opaquetype.opaque_id);
-      "supertype", st
-  ]
+                  | OpaqueT (_, opaquetype) ->
+                    let t = match opaquetype.underlying_t with
+                    | Some t -> _json_of_t json_cx t
+                    | None -> JSON_Null in
+                    let st = match opaquetype.super_t with
+                    | Some st -> _json_of_t json_cx st
+                    | None -> JSON_Null in
+                    [
+                      "type", t;
+                      "id", JSON_String (string_of_int opaquetype.opaque_id);
+                      "supertype", st
+                  ]
 
-  | ModuleT (_, {exports_tmap; cjs_export; has_every_named_export;}) ->
-    let tmap = Context.find_exports json_cx.cx exports_tmap in
-    let cjs_export = match cjs_export with
-    | Some(t) -> _json_of_t json_cx t
-    | None -> JSON_Null
-    in
-    [
-      "namedExports", json_of_tmap json_cx tmap;
-      "cjsExport", cjs_export;
-      "hasEveryNamedExport", JSON_Bool has_every_named_export;
-    ]
+                  | ModuleT (_, {exports_tmap; cjs_export; has_every_named_export;}) ->
+                    let tmap = Context.find_exports json_cx.cx exports_tmap in
+                    let cjs_export = match cjs_export with
+                    | Some(t) -> _json_of_t json_cx t
+                    | None -> JSON_Null
+                    in
+                    [
+                      "namedExports", json_of_tmap json_cx tmap;
+                      "cjsExport", cjs_export;
+                      "hasEveryNamedExport", JSON_Bool has_every_named_export;
+                    ]
 
-  | ExtendsT (_, _, t1, t2) -> [
-      "type1", _json_of_t json_cx t1;
-      "type2", _json_of_t json_cx t2
-    ]
+                  | ExtendsT (_, _, t1, t2) -> [
+                      "type1", _json_of_t json_cx t1;
+                      "type2", _json_of_t json_cx t2
+                    ]
 
-  | ChoiceKitT (_, tool) -> [
-      "tool", JSON_String (match tool with
-      | Trigger -> "trigger"
-      );
-    ]
+                  | ChoiceKitT (_, tool) -> [
+                      "tool", JSON_String (match tool with
+                      | Trigger -> "trigger"
+                      );
+                    ]
 
-  | TypeDestructorTriggerT (_, s, t) -> [
-      "destructor", json_of_destructor json_cx s;
-      "type", _json_of_t json_cx t;
-    ]
+                  | TypeDestructorTriggerT (_, s, t) -> [
+                      "destructor", json_of_destructor json_cx s;
+                      "type", _json_of_t json_cx t;
+                    ]
 
-  | CustomFunT (_, kind) -> [
-      "kind", _json_of_custom_fun_kind kind;
-    ] @ (match kind with
-      | ReactElementFactory t -> ["componentType", _json_of_t json_cx t]
-      | _ -> []
-    )
+                  | CustomFunT (_, kind) -> [
+                      "kind", _json_of_custom_fun_kind kind;
+                    ] @ (match kind with
+                      | ReactElementFactory t -> ["componentType", _json_of_t json_cx t]
+                      | _ -> []
+                    )
 
-  | IdxWrapper (_, t) -> [
-      "wrappedObj", _json_of_t json_cx t
-    ]
+                  | IdxWrapper (_, t) -> [
+                      "wrappedObj", _json_of_t json_cx t
+                    ]
 
-  | OpenPredT (_,t, pos_preds, neg_preds) -> [
-      let json_key_map f map = JSON_Object (
-        Key_map.elements map |>
-        List.map (Utils_js.map_pair Key.string_of_key f)
-      ) in
-      let json_pred_key_map = json_key_map (json_of_pred json_cx) in
-      "OpenPred", JSON_Object [
-        ("base_type", _json_of_t_impl json_cx t);
-        ("pos_preds", json_pred_key_map pos_preds);
-        ("neg_preds", json_pred_key_map neg_preds)
-      ]
-    ]
+                  | OpenPredT (_,t, pos_preds, neg_preds) -> [
+                      let json_key_map f map = JSON_Object (
+                        Key_map.elements map |>
+                        List.map (Utils_js.map_pair Key.string_of_key f)
+                      ) in
+                      let json_pred_key_map = json_key_map (json_of_pred json_cx) in
+                      "OpenPred", JSON_Object [
+                        ("base_type", _json_of_t_impl json_cx t);
+                        ("pos_preds", json_pred_key_map pos_preds);
+                        ("neg_preds", json_pred_key_map neg_preds)
+                      ]
+                    ]
 
-  | ReposT (_, t)
-  | ReposUpperT (_, t) -> [
-      "type", _json_of_t json_cx t
-    ]
+                  | ReposT (_, t)
+                  | ReposUpperT (_, t) -> [
+                      "type", _json_of_t json_cx t
+                    ]
 
-  )
-)
+                  )
+                )
 
 and _json_of_import_kind = Hh_json.(function
   | ImportType -> JSON_String "ImportType"
