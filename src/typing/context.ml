@@ -118,6 +118,7 @@ type local_t = {
 
   (*Map to remove duplicates in JSON output of dump-types --raw*)
   type_json_cache: (Type.t, int) Hashtbl.t;
+  type_uset_json_cache: (Type.use_t, int) Hashtbl.t;
 
   (* map from module names to their types *)
   mutable module_map: Type.t SMap.t;
@@ -214,6 +215,7 @@ let make metadata file module_ref = {
     all_unresolved = IMap.empty;
     require_map = SMap.empty;
     type_json_cache = Hashtbl.create 100;
+    type_uset_json_cache = Hashtbl.create 100;
     module_map = SMap.empty;
 
     errors = Errors.ErrorSet.empty;
@@ -266,6 +268,10 @@ let find_type_json_cached cx t =
     Hashtbl.find_opt cx.local.type_json_cache t
 let find_type_json_cached_unsafe cx t =
     Hashtbl.find cx.local.type_json_cache t
+let find_type_uset_json_cached cx t =
+    Hashtbl.find_opt cx.local.type_uset_json_cache t
+let find_type_uset_json_cached_unsafe cx t =
+    Hashtbl.find cx.local.type_uset_json_cache t
 let find_module cx m =
   try SMap.find_unsafe m cx.local.module_map
   with Not_found -> raise (Module_not_found m)
@@ -335,7 +341,9 @@ let add_imported_t cx name t =
 let add_require cx name tvar =
   cx.local.require_map <- SMap.add name tvar cx.local.require_map
 let add_type_json_cache cx t =
-    Hashtbl.add cx.local.type_json_cache t (Hashtbl.length cx.local.type_json_cache)
+    Hashtbl.add cx.local.type_json_cache t ((Hashtbl.length cx.local.type_json_cache) + (Hashtbl.length cx.local.type_uset_json_cache))
+let add_type_uset_json_cache cx t =
+    Hashtbl.add cx.local.type_uset_json_cache t ((Hashtbl.length cx.local.type_json_cache) + (Hashtbl.length cx.local.type_uset_json_cache))
 let add_module cx name tvar =
   cx.local.module_map <- SMap.add name tvar cx.local.module_map
 let add_property_map cx id pmap =

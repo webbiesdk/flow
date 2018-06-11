@@ -78,6 +78,8 @@ val find_exports: t -> Type.Exports.id -> Type.Exports.t
 val find_require: t -> string -> Type.t
 val find_type_json_cached: t -> Type.t -> int option
 val find_type_json_cached_unsafe: t -> Type.t -> int
+val find_type_uset_json_cached: t -> Type.use_t -> int option
+val find_type_uset_json_cached_unsafe: t -> Type.use_t -> int
 val find_module: t -> string -> Type.t
 val find_tvar: t -> Constraint.ident -> Constraint.node
 val mem_nominal_id: t -> Constraint.ident -> bool
@@ -126,6 +128,7 @@ val add_import_stmt: t -> Loc.t Ast.Statement.ImportDeclaration.t -> unit
 val add_imported_t: t -> string -> Type.t -> unit
 val add_require: t -> string -> Type.t -> unit
 val add_type_json_cache: t -> Type.t -> unit
+val add_type_uset_json_cache: t -> Type.use_t -> unit
 val add_module: t -> string -> Type.t -> unit
 val add_property_map: t -> Type.Properties.id -> Type.Properties.t -> unit
 val add_export_map: t -> Type.Exports.id -> Type.Exports.t -> unit

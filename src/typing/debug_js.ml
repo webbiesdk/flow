@@ -73,7 +73,7 @@ and _json_of_t_impl json_cx t =
       Some i ->
         Hh_json.(
           JSON_Object ([
-            "kind", JSON_String "unresolved";
+            "kind", JSON_String "cached";
             "id", JSON_String (string_of_int i)
           ])
         )
@@ -277,8 +277,12 @@ and _json_of_t_impl json_cx t =
                     ]
 
                   | AnnotT (t, use_desc) -> [
-                      "assume", _json_of_t json_cx t;
+                      (*"assume", _json_of_t json_cx t;*)
                       "useDesc", JSON_Bool use_desc;
+                      (*Just added such that t is not unused, which results in a compile-error*)
+                      "annotation_cache_id", JSON_String(match Context.find_type_json_cached json_cx.cx t with
+                                                   Some i -> string_of_int i
+                                                   | None -> "none")
                     ]
 
                   | OpaqueT (_, opaquetype) ->
